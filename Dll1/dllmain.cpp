@@ -31,12 +31,10 @@ typedef struct aes_input {
 	char input[];
 } aes_input, *paes_input;
 
-const int AES_INIT = 0x14532e8a0;
-
 void do_aes_decrypt(char* input_key, char* input_data, int input_len, char* output_data, int* output_len) {
 	char* aes_key = new char[488];
 
-	aes_init_ptr aes_init = reinterpret_cast<aes_init_ptr>(AES_INIT); //todo sigsearch ;-; - or just dont update the game
+	aes_init_ptr aes_init = reinterpret_cast<aes_init_ptr>(0x14532e8a0); //todo sigsearch ;-; - or just dont update the game
 	aes_init(aes_key, input_key);
 
 	aes_decrpyt_ptr aes_decrypt = reinterpret_cast<aes_decrpyt_ptr>(0x14532db10);
@@ -44,50 +42,42 @@ void do_aes_decrypt(char* input_key, char* input_data, int input_len, char* outp
 	//input len - 1 + output
 	int res = aes_decrypt(input_data, input_len, aes_key, output_data, output_len);
 
-	//todo - input nierówny wchuj XDDD jakeis trashbyte i w ogole
-	// ale gdzies po srodku jest decrypted wiec g
-	char buffer[128];
-	sprintf(buffer, "%s nigga\n", output_data);
-
-	OutputDebugStringA(buffer);
-
-	delete[] buffer;
+	delete[] aes_key;
 }
 
-
+const int BUFFER_SIZE = 65536;
 
 int main() {
 	HANDLE pipe = CreateNamedPipe(TEXT("\\\\.\\pipe\\fallingpipe"), PIPE_ACCESS_DUPLEX,
 		PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE |
-		PIPE_WAIT, 1, 512, 512, 0, NULL);
+		PIPE_WAIT, 1, BUFFER_SIZE, BUFFER_SIZE, 0, NULL);
 
-	char buffer[512];
+	char buffer[BUFFER_SIZE];
 	char* response;
 
 	while (true) {
-		memset(buffer, 0, 512);
+		memset(buffer, 0, BUFFER_SIZE);
 
 		ConnectNamedPipe(pipe, NULL);
 
 		// Get message
 		DWORD bytesRead;
-		ReadFile(pipe, buffer, 512, &bytesRead, NULL);
+		ReadFile(pipe, buffer, BUFFER_SIZE, &bytesRead, NULL);
 
 		int response_len;
 
+		printf("dupson first byte: %d", buffer[0]);
 		if (buffer[0] == 0x00) {
 			paes_input input = (paes_input)(buffer+1);
 
 			char* response2 = new char[input->input_len];
-			int response_len2 = input->input_len;
-			do_aes_decrypt(input->key, input->input, input->input_len, response2, &response_len2);
 
-			response = new char[128];
-			response_len = 128;
+			response_len = input->input_len;
+			response = new char[response_len];
+			memset(response, 0, response_len);
 
-			sprintf(response, "siema: %s\n", response2);
-		}
-		else {
+			do_aes_decrypt(input->key, input->input, input->input_len, response, &response_len);
+		} else {
 			response = new char[31];
 			response_len = 31;
 			strcpy(response, "idk men u sent something weird");
@@ -99,7 +89,7 @@ int main() {
 
 		DisconnectNamedPipe(pipe);
 
-		memset(response, 0, response_len);
+		delete[] response;
 	}
 
 	CloseHandle(pipe);
