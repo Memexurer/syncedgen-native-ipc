@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <Windows.h>
 #include <cstring>
+#include <stdlib.h>
 
 void print(const char* format, ...) {
 	va_list args;
@@ -31,18 +32,19 @@ typedef struct aes_input {
 	char input[];
 } aes_input, *paes_input;
 
-void do_aes_decrypt(char* input_key, char* input_data, int input_len, char* output_data, int* output_len) {
+int do_aes(char* input_key, char* input_data, int input_len, char* output_data, int* output_len, bool encrypt) {
 	char* aes_key = new char[488];
 
 	aes_init_ptr aes_init = reinterpret_cast<aes_init_ptr>(0x14532e8a0); //todo sigsearch ;-; - or just dont update the game
 	aes_init(aes_key, input_key);
 
-	aes_decrpyt_ptr aes_decrypt = reinterpret_cast<aes_decrpyt_ptr>(0x14532db10);
+	aes_decrpyt_ptr aes_decrypt = reinterpret_cast<aes_decrpyt_ptr>(encrypt ? 0x14532dc00 : 0x14532db10);
 
 	//input len - 1 + output
 	int res = aes_decrypt(input_data, input_len, aes_key, output_data, output_len);
-
 	delete[] aes_key;
+
+	return res;
 }
 
 const int BUFFER_SIZE = 65536;
@@ -65,18 +67,23 @@ int main() {
 		ReadFile(pipe, buffer, BUFFER_SIZE, &bytesRead, NULL);
 
 		int response_len;
+		int response_len_full;
 
 		printf("dupson first byte: %d", buffer[0]);
-		if (buffer[0] == 0x00) {
-			paes_input input = (paes_input)(buffer+1);
+		if (buffer[0] < 0x02) {
+			paes_input input = (paes_input)(buffer + 1);
 
-			char* response2 = new char[input->input_len];
+			char* response2 = new char[input->input_len + 1]; // +1 zeby bylo miejsce na response code
 
 			response_len = input->input_len;
-			response = new char[response_len];
-			memset(response, 0, response_len);
+			response_len_full = response_len + 1;
 
-			do_aes_decrypt(input->key, input->input, input->input_len, response, &response_len);
+			response = new char[response_len_full]; // zeby bylo miejsce na response code
+			memset(response, 0, response_len_full);
+
+			response[0] = abs(do_aes(input->key, input->input, input->input_len, response + 1, &response_len, buffer[0] == 0x01)) & 0xFF; // first byte
+
+			response_len += 1;
 		} else {
 			response = new char[31];
 			response_len = 31;
