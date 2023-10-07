@@ -31,16 +31,19 @@ typedef struct aes_input {
 	char input[];
 } aes_input, *paes_input;
 
-void do_aes_decrypt(char* input_key, char* input_data, int input_len, char* output_data, int* output_len) {
+void do_aes_decrypt(char* input_key, char* input_data, int input_len, char* output_data, int* output_len, bool cool) {
 	char* aes_key = new char[488];
 
 	aes_init_ptr aes_init = reinterpret_cast<aes_init_ptr>(0x14532e8a0); //todo sigsearch ;-; - or just dont update the game
 	aes_init(aes_key, input_key);
 
-	aes_decrpyt_ptr aes_decrypt = reinterpret_cast<aes_decrpyt_ptr>(0x14532db10);
+	aes_decrpyt_ptr aes_decrypt = reinterpret_cast<aes_decrpyt_ptr>(cool ? 0x14532dc00 : 0x14532db10);
 
 	//input len - 1 + output
 	int res = aes_decrypt(input_data, input_len, aes_key, output_data, output_len);
+	if (res != 0) {
+		print("aes failed: %d", res);
+	}
 
 	delete[] aes_key;
 }
@@ -66,8 +69,7 @@ int main() {
 
 		int response_len;
 
-		printf("dupson first byte: %d", buffer[0]);
-		if (buffer[0] == 0x00) {
+		if (buffer[0] == 0x00 || buffer[0] == 0x01) {
 			paes_input input = (paes_input)(buffer+1);
 
 			char* response2 = new char[input->input_len];
@@ -76,7 +78,7 @@ int main() {
 			response = new char[response_len];
 			memset(response, 0, response_len);
 
-			do_aes_decrypt(input->key, input->input, input->input_len, response, &response_len);
+			do_aes_decrypt(input->key, input->input, input->input_len, response, &response_len, (bool) buffer[0]);
 		} else {
 			response = new char[31];
 			response_len = 31;
